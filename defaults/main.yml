@@ -1,0 +1,63 @@
+---
+apache2_http_port: 80
+
+apache2_https_port: 443
+
+apache2_hostname_lookups: "Off"
+
+apache2_use_canonical_name: "Off"
+
+apache2_server_signature: "Off"
+
+apache2_default_directory_index: "index.html index.htm"
+
+apache2_access_filename: ".htaccess"
+
+apache2_trace_enable: "Off"
+
+apache2_server_tokens: "Prod"
+
+apache2_add_default_charseet: "UTF-8"
+
+apache2_add_media_mimetypes:
+  - audio/mpeg mp3
+  - audio/mp4 m4a
+  - audio/ogg ogg
+  - audio/ogg oga
+  - audio/webm webma
+  - audio/wav wav
+  - video/mp4 mp4
+  - video/mp4 m4v
+  - video/ogg ogv
+  - video/webm webm
+  - video/webm webmv
+
+apache2_prefork_max_clients: 256
+
+apache2_standard_mods_enabled:
+  - deflate
+  - expires
+  - headers
+  - filter
+  - rewrite
+  - ssl
+
+apache2_additional_mods_enabled: []
+
+apache2_mods_disabled: []
+
+apache2_ssl_dir: "ssl/"
+
+apache2_openssl_certificates:
+  - file_name: "000-404-ssl"
+    country_name: "Country"
+    state_province: "Province"
+    locality_name: "City"
+    organization_name: "Company"
+    organizational_unit: "Departement"
+    common_name: "{{ ansible_fqdn }}"
+    email_address: "email@address.cc"
+
+apache2_additional_vhosts: []
+#  - name: "my.domain.com"
+#    path: "templates/my.domain.com"

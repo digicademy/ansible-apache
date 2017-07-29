@@ -1,0 +1,28 @@
+<VirtualHost *:80>
+
+    ServerAdmin admin@adwmainz.net
+
+    ServerName 404
+
+    DocumentRoot /var/www/vhosts/000-404/htdocs/
+
+    ErrorLog /var/log/apache2/000-404-error.log
+    CustomLog /var/log/apache2/000-404-access.log combined
+
+    <Directory "/var/www/vhosts/000-404/htdocs/">
+
+        Options None
+
+        AllowOverride None
+
+{% if apache2_minor_version == "2" %}
+        Order allow,deny
+        Allow from all
+{% endif %}
+{% if apache2_minor_version == "4" %}
+        Require all granted
+{% endif %}
+
+    </Directory>
+
+</VirtualHost>

@@ -1,0 +1,198 @@
+---
+- name: Update apt cache
+  apt: update_cache=yes cache_valid_time=86400
+
+- name: Install apache2
+  apt: pkg=apache2 state=present force=yes
+
+# set apache version specific vars
+
+- name: Get installed version of apache2
+  shell: "/usr/sbin/apache2 -v"
+  changed_when: false
+  check_mode: no
+  register: apache2_daemon_out
+
+- name: Create apache2_version variable
+  set_fact:
+    apache2_version: "{{ apache2_daemon_out.stdout.split()[2].split('/')[1] }}"
+
+- name: Create apache2_minor_version variable
+  set_fact:
+    apache2_minor_version: "{{ apache2_version.split('.')[1] }}"
+
+- include_vars: apache2.2.yml
+  when: "apache2_minor_version == '2'"
+
+- include_vars: apache2.4.yml
+  when: "apache2_minor_version == '4'"
+
+# configure ports
+
+- name: Configure apache2 ports
+  template:
+    src: ports.conf.j2
+    dest: "{{ apache2_conf_path }}ports.conf"
+    owner: root
+    group: root
+    mode: u+rw,go+r
+  notify: restart apache2
+
+# enable standard modules
+
+- name: Enable apache2 standard modules
+  apache2_module: state=present name={{ item }}
+  with_items: "{{ apache2_standard_mods_enabled }}"
+  notify: restart apache2
+
+- name: Enable apache2 additional modules (for instance configuring a proxy etc.)
+  apache2_module: state=present name={{ item }}
+  with_items: "{{ apache2_additional_mods_enabled }}"
+  notify: restart apache2
+
+- name: Possibly disable some unwanted apache2 modules
+  apache2_module: state=absent name={{ item }}
+  with_items: "{{ apache2_mods_disabled }}"
+  notify: restart apache2
+
+# ssl configuration
+
+- name: Create ssl dir if it doesn't exist
+  file:
+    path: "{{ apache2_conf_path }}{{ apache2_ssl_dir }}"
+    state: directory
+    mode: u+rwx,go-rwx
+
+- name: Check if dhparam file exists
+  stat: path=/etc/ssl/certs/dhparam.pem
+  register: dhparam
+
+- name: Generate dhparam file if it does not exist
+  command: "openssl dhparam -out /etc/ssl/certs/dhparam.pem 4096"
+  when: dhparam.stat.exists == false
+
+- name: Create self signed certificates
+  command: openssl req -new -x509 -days 365 -nodes -subj "/C={{ item.country_name }}/ST={{ item.state_province }}/L={{ item.locality_name }}/O={{ item.organization_name }}/OU={{ item.organizational_unit }}/CN={{ item.common_name }}/emailAddress={{ item.email_address }}"  -keyout {{ apache2_conf_path }}{{ apache2_ssl_dir }}{{ item.file_name }}.key -out {{ apache2_conf_path }}{{ apache2_ssl_dir }}{{ item.file_name }}.pem -extensions v3_ca
+  args:
+    creates: "{{ apache2_conf_path }}{{ apache2_ssl_dir }}{{ item.file_name }}.key"
+  with_items: "{{ apache2_openssl_certificates }}"
+  notify: restart apache2
+
+# put custom apache configuration into place
+
+- name: Put host specific apache2 configuration into place
+  template:
+    src: zz_server.conf.j2
+    dest: "{{ apache2_conf_path }}{{ apache2_conf_dir }}zz_{{ ansible_hostname }}{{ apache2_conf_file_extension }}"
+    owner: root
+    group: root
+    mode: u+rw,go+r
+  notify: restart apache2
+
+# remove default vhost
+
+- name: Remove default vhost
+  file: path={{ apache2_root_dir }}index.html state=absent
+
+- name: Remove symlink to default site
+  file: path={{ apache2_conf_path }}/sites-enabled/000-default{{ apache2_conf_file_extension }} state=absent
+  notify: restart apache2
+
+# add 000-404 and 000-404-ssl catch all vhosts
+
+- name: Create vhosts dir and 000-404 webroot
+  file:
+    path: "{{ apache2_root_dir }}{{ apache2_vhosts_dir }}000-404/{{ apache2_webroot_dir }}/"
+    recurse: yes
+    state: directory
+
+- name: Put 000-404 index.html into place
+  template:
+    src: index.html.j2
+    dest: "{{ apache2_root_dir }}{{ apache2_vhosts_dir }}000-404/{{ apache2_webroot_dir }}/index.html"
+
+- name: Set permissions but only if not on a vagrant nfs mount
+  file:
+    path: "{{ item.path }}"
+    owner: root
+    group: root
+    mode: "{{ item.permissions }}"
+  with_items:
+    - { path: "{{ apache2_root_dir }}{{ apache2_vhosts_dir }}", permissions: "u+rw,go+r" }
+    - { path: "{{ apache2_root_dir }}{{ apache2_vhosts_dir }}000-404/{{ apache2_webroot_dir }}/", permissions: "u+rw,go+r" }
+    - { path: "{{ apache2_root_dir }}{{ apache2_vhosts_dir }}000-404/{{ apache2_webroot_dir }}/index.html", permissions: "u+rw,go+r" }
+  when: ansible_product_name != 'VirtualBox'
+
+- name: Place vhosts configurations for 000-404 and 000-404-ssl
+  template:
+    src: "{{ item }}.j2"
+    dest: "{{ apache2_conf_path }}sites-available/{{ item }}{{ apache2_conf_file_extension }}"
+    owner: root
+    group: root
+    mode: u+rw,go+r
+  with_items:
+    - 000-404
+    - 000-404-ssl
+  notify: restart apache2
+
+- name: Enable 000-404 and 000-404-ssl
+  file:
+    path: "{{ apache2_conf_path }}/sites-enabled/{{ item }}{{ apache2_conf_file_extension }}"
+    src: "../sites-available/{{ item }}{{ apache2_conf_file_extension }}"
+    state: link
+  with_items:
+    - 000-404
+    - 000-404-ssl
+  notify: restart apache2
+
+# add additional vhosts
+
+- name: Create webroot directories for additional vhosts
+  file:
+    path: "{{ apache2_root_dir }}{{ apache2_vhosts_dir }}{{ item.name }}/{{ item.webroot | default(apache2_webroot_dir) }}/"
+    recurse: yes
+    state: directory
+  with_items: "{{ apache2_additional_vhosts }}"
+  when: apache2_additional_vhosts is defined
+  notify: restart apache2
+
+- name: Chown webroot directories for additional vhosts on production systems
+  file:
+    path: "{{ apache2_root_dir }}{{ apache2_vhosts_dir }}{{ item.name }}/{{ item.webroot | default(apache2_webroot_dir) }}/"
+    recurse: yes
+    owner: www-data
+    group: www-data
+    mode: u+rw,go+r
+  with_items: "{{ apache2_additional_vhosts }}"
+  when: apache2_additional_vhosts is defined and ansible_product_name != 'VirtualBox' # avoids permission problems on vagrant nfs mounts
+  changed_when: false
+
+- name: Chown additional vhosts parent dirs to root
+  file:
+    path: "{{ apache2_root_dir }}{{ apache2_vhosts_dir }}{{ item.name }}"
+    owner: root
+    group: root
+    mode: u+rw,go+r
+  with_items: "{{ apache2_additional_vhosts }}"
+  when: apache2_additional_vhosts is defined and ansible_product_name != 'VirtualBox' # avoids permission problems on vagrant nfs mounts
+  notify: restart apache2
+
+- name: Place additional vhosts configurations into {{ apache2_conf_path }}
+  template:
+    src: "{{ item.path }}.j2"
+    dest: "{{ apache2_conf_path }}sites-available/{{ item.name }}{{ apache2_conf_file_extension }}"
+    owner: root
+    group: root
+    mode: u+rw,go+r
+  with_items: "{{ apache2_additional_vhosts }}"
+  when: apache2_additional_vhosts is defined
+  notify: restart apache2
+
+- name: Enable additional vhosts
+  file:
+    path: "{{ apache2_conf_path }}/sites-enabled/{{ item.name }}{{ apache2_conf_file_extension }}"
+    src: "../sites-available/{{ item.name }}{{ apache2_conf_file_extension }}"
+    state: link
+  with_items: "{{ apache2_additional_vhosts }}"
+  when: apache2_additional_vhosts is defined
+  notify: restart apache2

@@ -1,0 +1,37 @@
+<VirtualHost *:443>
+
+    ServerAdmin admin@adwmainz.net
+
+    ServerName 404
+
+    DocumentRoot /var/www/vhosts/000-404/htdocs/
+
+    ErrorLog /var/log/apache2/000-404-error.log
+    CustomLog /var/log/apache2/000-404-access.log combined
+
+    SSLEngine On
+{% if apache2_minor_version == "4" %}
+    SSLCompression off
+    SSLOpenSSLConfCmd DHParameters "/etc/ssl/certs/dhparam.pem"
+{% endif %}
+
+    SSLCertificateFile {{ apache2_conf_path }}{{ apache2_ssl_dir }}000-404-ssl.pem
+    SSLCertificateKeyFile {{ apache2_conf_path }}{{ apache2_ssl_dir }}000-404-ssl.key
+
+    Header always set Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+    Header always set X-Frame-Options DENY
+    Header always set X-Content-Type-Options nosniff
+
+    <Directory "/var/www/vhosts/000-404/htdocs/">
+
+{% if apache2_minor_version == "2" %}
+        Order allow,deny
+        Allow from all
+{% endif %}
+{% if apache2_minor_version == "4" %}
+        Require all granted
+{% endif %}
+
+    </Directory>
+
+</VirtualHost>

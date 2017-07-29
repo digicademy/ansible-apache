@@ -1,0 +1,26 @@
+{% if apache2_minor_version == "2" %}
+NameVirtualHost *:{{ apache2_http_port }}
+Listen {{ apache2_http_port }}
+
+<IfModule mod_ssl.c>
+    NameVirtualHost *:{{ apache2_https_port }}
+    Listen {{ apache2_https_port }}
+</IfModule>
+
+<IfModule mod_gnutls.c>
+    NameVirtualHost *:{{ apache2_https_port }}
+    Listen {{ apache2_https_port }}
+</IfModule>
+{% endif %}
+
+{% if apache2_minor_version == "4" %}
+Listen {{ apache2_http_port }}
+
+<IfModule ssl_module>
+    Listen {{ apache2_https_port }}
+</IfModule>
+
+<IfModule mod_gnutls.c>
+    Listen {{ apache2_https_port }}
+</IfModule>
+{% endif %}

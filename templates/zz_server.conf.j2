@@ -1,0 +1,95 @@
+## COMMON configuration directives ############################
+
+# dont lose time with IP address lookups
+HostnameLookups {{ apache2_hostname_lookups }}
+
+# needed for named virtual hosts
+UseCanonicalName {{ apache2_use_canonical_name }}
+
+# configures the footer on server-generated documents
+ServerSignature {{ apache2_server_signature }}
+
+# globally supported index files
+DirectoryIndex {{ apache2_default_directory_index }}
+
+# global name for .htaccess fildes
+AccessFileName {{ apache2_access_filename }}
+
+# stop TRACE and/or TRACK methods
+TraceEnable {{ apache2_trace_enable }}
+
+# limit the information emanating from the server
+ServerTokens {{ apache2_server_tokens }}
+
+# default charset
+AddDefaultCharset {{ apache2_add_default_charseet }}
+
+# SSL directives; @see: https://cipherli.st/; @see below for Jessi additional directives
+SSLProtocol All -SSLv2 -SSLv3
+SSLCipherSuite EECDH+AESGCM:EDH+AESGCM:AES256+EECDH:AES256+EDH
+SSLHonorCipherOrder On
+
+# add media mimes
+{% for item in apache2_add_media_mimetypes %}
+AddType {{ item }}
+{% endfor %}
+
+<IfModule mpm_prefork_module>
+    MaxClients {{ apache2_prefork_max_clients }}
+</IfModule>
+
+<IfModule mod_status.c>
+    ExtendedStatus On
+    <Location /server-status>
+        SetHandler server-status
+{% if apache2_minor_version == "2" %}
+        Order deny,allow
+        Deny from all
+        Allow from localhost
+{% endif %}
+{% if apache2_minor_version == "4" %}
+        Require local
+{% endif %}
+    </Location>
+</IfModule>
+
+<DirectoryMatch "/\.git">
+{% if apache2_minor_version == "2" %}
+    Order deny,allow
+    Deny from all
+{% endif %}
+{% if apache2_minor_version == "4" %}
+    Require all denied
+{% endif %}
+</DirectoryMatch>
+
+<DirectoryMatch "/\.svn">
+{% if apache2_minor_version == "2" %}
+    Order deny,allow
+    Deny from all
+{% endif %}
+{% if apache2_minor_version == "4" %}
+    Require all denied
+{% endif %}
+</DirectoryMatch>
+
+{% if apache2_minor_version == "2" %}
+## WHEEZY configuration directives ##########################
+
+{% endif %}
+
+{% if apache2_minor_version == "4" %}
+## JESSIE configuration directives ##########################
+
+SSLCompression off
+SSLUseStapling on
+SSLStaplingCache "shmcb:logs/stapling-cache(150000)"
+
+{% endif %}
+
+{% if apache2_custom_configuration is defined %}
+## CUSTOM configuration directives ##########################
+
+{{ apache2_custom_configuration }}
+
+{% endif %}
