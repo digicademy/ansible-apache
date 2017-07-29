@@ -48,6 +48,10 @@ apache2_mods_disabled: []
 
 apache2_ssl_dir: "ssl/"
 
+apache2_ssl_dhparam_path: "/etc/ssl/certs/dhparam.pem"
+
+apache2_ssl_dhparam_bytes: 4096
+
 apache2_openssl_certificates:
   - file_name: "000-404-ssl"
     country_name: "Country"
@@ -61,3 +65,5 @@ apache2_openssl_certificates:
 apache2_additional_vhosts: []
 #  - name: "my.domain.com"
 #    path: "templates/my.domain.com"
+#    apache2_root_dir: ""
+#    apache2_vhosts_dir: ""

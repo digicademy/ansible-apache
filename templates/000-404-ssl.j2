@@ -12,7 +12,6 @@
     SSLEngine On
 {% if apache2_minor_version == "4" %}
     SSLCompression off
-    SSLOpenSSLConfCmd DHParameters "/etc/ssl/certs/dhparam.pem"
 {% endif %}
 
     SSLCertificateFile {{ apache2_conf_path }}{{ apache2_ssl_dir }}000-404-ssl.pem

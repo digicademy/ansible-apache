@@ -63,20 +63,25 @@
     state: directory
     mode: u+rwx,go-rwx
 
-- name: Check if dhparam file exists
-  stat: path=/etc/ssl/certs/dhparam.pem
-  register: dhparam
-
-- name: Generate dhparam file if it does not exist
-  command: "openssl dhparam -out /etc/ssl/certs/dhparam.pem 4096"
-  when: dhparam.stat.exists == false
-
 - name: Create self signed certificates
   command: openssl req -new -x509 -days 365 -nodes -subj "/C={{ item.country_name }}/ST={{ item.state_province }}/L={{ item.locality_name }}/O={{ item.organization_name }}/OU={{ item.organizational_unit }}/CN={{ item.common_name }}/emailAddress={{ item.email_address }}"  -keyout {{ apache2_conf_path }}{{ apache2_ssl_dir }}{{ item.file_name }}.key -out {{ apache2_conf_path }}{{ apache2_ssl_dir }}{{ item.file_name }}.pem -extensions v3_ca
   args:
     creates: "{{ apache2_conf_path }}{{ apache2_ssl_dir }}{{ item.file_name }}.key"
   with_items: "{{ apache2_openssl_certificates }}"
   notify: restart apache2
+
+- name: Check if dhparam file exists
+  stat: path="{{ apache2_ssl_dhparam_path }}"
+  register: dhparam
+
+- name: Generate dhparam file if it does not exist
+  command: "openssl dhparam -out {{ apache2_ssl_dhparam_path }} {{ apache2_ssl_dhparam_bytes }}"
+  when: dhparam.stat.exists == false
+
+- name: Append DH param to self signed certificates (Apache < 2.4.8)
+  shell: "cat {{ apache2_ssl_dhparam_path }} >> {{ apache2_conf_path }}{{ apache2_ssl_dir }}{{ item.file_name }}.key"
+  with_items: "{{ apache2_openssl_certificates }}"
+  when: dhparam.stat.exists == false
 
 # put custom apache configuration into place
 
@@ -149,7 +154,7 @@
 
 - name: Create webroot directories for additional vhosts
   file:
-    path: "{{ apache2_root_dir }}{{ apache2_vhosts_dir }}{{ item.name }}/{{ item.webroot | default(apache2_webroot_dir) }}/"
+    path: "{{ item.apache2_root_dir | default(apache2_root_dir) }}{{ item.apache2_vhosts_dir | default(apache2_vhosts_dir) }}{{ item.name }}/{{ item.webroot | default(apache2_webroot_dir) }}/"
     recurse: yes
     state: directory
   with_items: "{{ apache2_additional_vhosts }}"
@@ -158,7 +163,7 @@
 
 - name: Chown webroot directories for additional vhosts on production systems
   file:
-    path: "{{ apache2_root_dir }}{{ apache2_vhosts_dir }}{{ item.name }}/{{ item.webroot | default(apache2_webroot_dir) }}/"
+    path: "{{ item.apache2_root_dir | default(apache2_root_dir) }}{{ item.apache2_vhosts_dir | default(apache2_vhosts_dir) }}{{ item.name }}/{{ item.webroot | default(apache2_webroot_dir) }}/"
     recurse: yes
     owner: www-data
     group: www-data
@@ -169,7 +174,7 @@
 
 - name: Chown additional vhosts parent dirs to root
   file:
-    path: "{{ apache2_root_dir }}{{ apache2_vhosts_dir }}{{ item.name }}"
+    path: "{{ item.apache2_root_dir | default(apache2_root_dir) }}{{ item.apache2_vhosts_dir | default(apache2_vhosts_dir) }}{{ item.name }}"
     owner: root
     group: root
     mode: u+rw,go+r
